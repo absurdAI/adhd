@@ -1,0 +1,11 @@
+Characteristic,Study A,Study B,Study C,Study D
+Sample Size,N = 128,N = 325,N = 123,N = 278
+Referral source,Parent/Teacher Clinic Referral,School-Referred,Parent/Teacher Clinic Referral,Community Mental Health
+Setting,University Clinic,School,University Clinic,Community Mental Health
+Time of Year,Fall or Spring,Summer,"Fall, Winter, or Spring","Fall, Winter, or Spring"
+Treatment Duration,10 weeks,8 weeks,8–10 weeks,10 weeks
+Treatment Arms,"STAND (n = 67), NOTX (n = 61)","STP-A (n = 109), STAND-G (n = 109), NOTX (n = 107)","STAND (n = 63), STAND-G (n = 60)","STAND (n = 138), UC (n = 140)"
+Clinician Type,"Graduate and Post-Graduate Trainees, Masters Level","School District Staff, College Student Interns","Graduate Trainees, Licensed Clinicians",Community Mental Health Practitioners
+Start of Study,Fall 2011,Spring 2012,Spring 2014,Fall 2015
+BL to POST,6 months,6 months,6 months,4 months
+BL to FU,12 months,12 months,12 months,10 months
