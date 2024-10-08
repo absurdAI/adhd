@@ -96,34 +96,38 @@ network_data <- adhd_cleaned %>%
     bdi1_total, audit1_total, aas1_total, asrs1_total.x, bai1_total
   )
 
-# Step 7: Clean and recode data
-# Recode 'sex' variable
+# Step 7 (Adjusted): Clean and recode data
+# Recode 'sex' variable to numeric codes
 network_data <- network_data %>%
   mutate(
     sex = case_when(
-      tolower(sex) == "male" ~ "Male",
-      tolower(sex) == "female" ~ "Female",
-      TRUE ~ "Other"
+      tolower(sex) == "male" ~ 1,
+      tolower(sex) == "female" ~ 2,
+      TRUE ~ 3  # For 'Other' or any other entries
     )
   )
 
-# Recode 'nbt_did_math' to numeric
+# Recode 'group' variable to numeric codes
+# Create a mapping for 'group' levels
+group_levels <- c("No Diagnosis", "Other", "ADHD")
 network_data <- network_data %>%
   mutate(
-    nbt_did_math = case_when(
-      tolower(nbt_did_math) == "yes" ~ 1,
-      tolower(nbt_did_math) == "no" ~ 0,
-      TRUE ~ NA_real_
-    )
+    group = factor(group, levels = group_levels),
+    group = as.numeric(group)
   )
 
-# Convert academic variables to numeric
+# Ensure 'nbt_did_math' is numeric (should already be, but just in case)
+network_data <- network_data %>%
+  mutate(
+    nbt_did_math = as.numeric(nbt_did_math)
+  )
+
+# Convert academic variables to numeric (already done)
 network_data <- network_data %>%
   mutate(
     psy1004_grade = as.numeric(psy1004_grade),
     nbt_math = as.numeric(nbt_math),
     matric_mark = as.numeric(matric_mark),
-    # Convert psychological measures to numeric if included
     bdi1_total = as.numeric(bdi1_total),
     audit1_total = as.numeric(audit1_total),
     aas1_total = as.numeric(aas1_total),
@@ -135,21 +139,19 @@ network_data <- network_data %>%
 network_data <- network_data %>%
   drop_na()
 
-# Step 8: Prepare data for network psychometrics model
-# Encode 'group' and 'sex' as factors
-network_data <- network_data %>%
-  mutate(
-    group = factor(group),
-    sex = factor(sex)
-  )
-
+# Step 8 (Adjusted): Prepare data for network psychometrics model
 # Standardize continuous variables
-continuous_vars <- c("psy1004_grade", "nbt_math", "matric_mark", "bdi1_total", "audit1_total", "aas1_total", "asrs1_total.x", "bai1_total")
+continuous_vars <- c("psy1004_grade", "nbt_math", "matric_mark",
+                     "bdi1_total", "audit1_total", "aas1_total",
+                     "asrs1_total.x", "bai1_total")
 network_data <- network_data %>%
-  mutate(across(all_of(continuous_vars), scale))
+  mutate(across(all_of(continuous_vars), ~ scale(.)[, 1]))
 
 # Convert data to matrix for mgm
 network_matrix <- as.matrix(network_data)
+
+# Verify that all columns are numeric
+str(network_matrix)
 
 # Define types and levels for mgm
 num_vars <- ncol(network_matrix)
@@ -162,11 +164,18 @@ categorical_indices <- which(colnames(network_matrix) %in% categorical_vars)
 
 # Update types and levels for categorical variables
 types[categorical_indices] <- "c"
-levels[categorical_indices] <- sapply(network_data[, categorical_indices], function(x) nlevels(factor(x)))
+levels[categorical_indices] <- sapply(network_data[, categorical_indices], function(x) length(unique(x)))
 
 # Ensure 'types' and 'levels' have correct lengths
 types <- types[1:num_vars]
 levels <- levels[1:num_vars]
+
+# Verify 'types' and 'levels'
+data.frame(
+  Variable = colnames(network_matrix),
+  Type = types,
+  Level = levels
+) %>% print()
 
 # Step 9: Fit the mixed graphical model using mgm
 mgm_fit <- mgm(
@@ -178,34 +187,6 @@ mgm_fit <- mgm(
   ruleReg = "AND"
 )
 
-# Step 10: View the summary of the fitted model
-print(mgm_fit)
+# Check the class of each column in network_matrix
+sapply(network_matrix, class)
 
-# Step 11: Visualize the network
-# Extract adjacency matrix and signs
-adjacency_matrix <- mgm_fit$pairwise$wadj
-signs_matrix <- mgm_fit$pairwise$signs
-
-# Combine to get the weighted adjacency matrix
-weighted_adj_matrix <- adjacency_matrix * signs_matrix
-
-# Set row and column names to variable names
-colnames(weighted_adj_matrix) <- rownames(weighted_adj_matrix) <- colnames(network_matrix)
-
-# Replace non-finite values with zero
-weighted_adj_matrix[!is.finite(weighted_adj_matrix)] <- 0
-
-# Plot the network
-qgraph(
-  weighted_adj_matrix,
-  layout = "spring",
-  labels = colnames(network_matrix),
-  theme = "colorblind",
-  edge.color = NULL,       # Use default coloring based on sign
-  posCol = "darkgreen",
-  negCol = "red",
-  vsize = 7,
-  label.cex = 1.2,
-  edge.width = 1.5,
-  title = "Mixed Graphical Model Network"
-)
