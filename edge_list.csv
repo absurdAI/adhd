@@ -1,0 +1,11 @@
+"from","to","weight"
+"nbt_ave","nbt_alql_ave",0.988645246729541
+"nbt_math","nbt_ave",0.887799805447769
+"nbt_math","nbt_alql_ave",-0.779130645408256
+"bdi1_total","bai1_total",0.506279171192319
+"psy1004_grade","matric_mark",0.348914246445032
+"asrs1_total.x","bai1_total",0.235496049279724
+"bdi1_total","asrs1_total.x",0.219624718301013
+"bdi1_total","aas1_total",-0.147379193789739
+"matric_mark","bdi1_total",-0.109358649475677
+"matric_mark","bai1_total",0.0821764059682784
