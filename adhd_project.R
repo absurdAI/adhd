@@ -23,7 +23,6 @@ adhd_cleaned <- adhd_data %>%
   )
 
 # Step 3: Clean diagnosis descriptions for diagnosed students
-# Only process diagnosis descriptions for students who have been formally diagnosed ('Yes')
 adhd_cleaned <- adhd_cleaned %>%
   mutate(
     diagnosis_cleaned = if_else(
@@ -37,17 +36,15 @@ adhd_cleaned <- adhd_cleaned %>%
   )
 
 # Step 4: Create diagnosis flags
-# Define keywords for ADHD and other diagnoses
 adhd_keywords <- c("adhd", "add", "attention deficit")
 
 other_diagnoses_keywords <- c(
   "depression", "anxiety", "bipolar", "ocd", "ptsd", "autism",
   "eating disorder", "personality disorder", "insomnia", "substance use",
   "schizophrenia", "phobia", "panic disorder", "dissociative disorder",
-  "psychotic disorder", "addiction", "other diagnosis keywords"  # Add any other relevant keywords
+  "psychotic disorder", "addiction", "other diagnosis keywords"
 )
 
-# Create flags
 adhd_cleaned <- adhd_cleaned %>%
   mutate(
     has_adhd = if_else(
@@ -61,11 +58,6 @@ adhd_cleaned <- adhd_cleaned %>%
   )
 
 # Step 5: Create group labels
-# According to your instructions:
-# - 'ADHD': has_adhd == 1 (regardless of other diagnoses)
-# - 'Other': has_adhd == 0 & has_other_diagnosis == 1
-# - 'No Diagnosis': diagnosed_bin == 'No'
-
 adhd_cleaned <- adhd_cleaned %>%
   mutate(
     group = case_when(
@@ -76,39 +68,32 @@ adhd_cleaned <- adhd_cleaned %>%
     )
   )
 
-# Exclude rows where group is NA (i.e., diagnosed_bin == 'Yes' but diagnosis_cleaned didn't match any keywords)
+# Exclude rows where group is NA
 adhd_cleaned <- adhd_cleaned %>%
   filter(!is.na(group))
 
 # Step 6: Select relevant variables for network analysis
-# Include group and academic variables
 network_data <- adhd_cleaned %>%
   select(
-    # Group variable
-    group,
-    # Binary variables
-    sex,
-    nbt_did_math,
-    # Academic performance variables
-    psy1004_grade, nbt_math, matric_mark,
-    # Include any other variables you deem relevant
-    # For example, psychological measures if desired
-    bdi1_total, audit1_total, aas1_total, asrs1_total.x, bai1_total
+    group,           # Diagnosis group
+    sex,             # Sex
+    nbt_did_math,    # Did the student take math?
+    psy1004_grade,   # Academic performance (Psychology grade)
+    nbt_math,        # Math score
+    matric_mark,     # High school academic performance
+    bdi1_total, audit1_total, aas1_total, asrs1_total.x, bai1_total # Psychological measures
   )
 
-# Step 7 (Adjusted): Clean and recode data
-# Recode 'sex' variable to numeric codes
+# Step 7: Clean and recode data
+
+# Filter 'sex' variable to include only 'male' and 'female', then convert to numeric
 network_data <- network_data %>%
+  filter(tolower(sex) %in% c("male", "female")) %>%
   mutate(
-    sex = case_when(
-      tolower(sex) == "male" ~ 1,
-      tolower(sex) == "female" ~ 2,
-      TRUE ~ 3  # For 'Other' or any other entries
-    )
+    sex = if_else(tolower(sex) == "male", 1, 2)  # 1 for male, 2 for female
   )
 
 # Recode 'group' variable to numeric codes
-# Create a mapping for 'group' levels
 group_levels <- c("No Diagnosis", "Other", "ADHD")
 network_data <- network_data %>%
   mutate(
@@ -116,13 +101,17 @@ network_data <- network_data %>%
     group = as.numeric(group)
   )
 
-# Ensure 'nbt_did_math' is numeric (should already be, but just in case)
+# Recode 'nbt_did_math' from 'Yes'/'No' to 1/0
 network_data <- network_data %>%
   mutate(
-    nbt_did_math = as.numeric(nbt_did_math)
+    nbt_did_math = case_when(
+      tolower(nbt_did_math) == "yes" ~ 1,
+      tolower(nbt_did_math) == "no" ~ 0,
+      TRUE ~ NA_real_
+    )
   )
 
-# Convert academic variables to numeric (already done)
+# Convert academic variables and psychological measures to numeric
 network_data <- network_data %>%
   mutate(
     psy1004_grade = as.numeric(psy1004_grade),
@@ -139,7 +128,12 @@ network_data <- network_data %>%
 network_data <- network_data %>%
   drop_na()
 
-# Step 8 (Adjusted): Prepare data for network psychometrics model
+# Convert any remaining factors to numeric
+network_data <- network_data %>%
+  mutate(across(everything(), ~ as.numeric(as.character(.))))
+
+# Step 8: Prepare data for network psychometrics model
+
 # Standardize continuous variables
 continuous_vars <- c("psy1004_grade", "nbt_math", "matric_mark",
                      "bdi1_total", "audit1_total", "aas1_total",
@@ -147,37 +141,51 @@ continuous_vars <- c("psy1004_grade", "nbt_math", "matric_mark",
 network_data <- network_data %>%
   mutate(across(all_of(continuous_vars), ~ scale(.)[, 1]))
 
-# Convert data to matrix for mgm
+# Convert the cleaned dataset into a matrix
 network_matrix <- as.matrix(network_data)
 
-# Verify that all columns are numeric
-str(network_matrix)
+# Verify that all elements are numeric
+storage_mode <- storage.mode(network_matrix)
+print(paste("Storage mode of network_matrix:", storage_mode))
+
+# Check for non-numeric elements
+any_non_numeric <- any(is.na(as.numeric(network_matrix)))
+print(paste("Any non-numeric elements in network_matrix:", any_non_numeric))
 
 # Define types and levels for mgm
 num_vars <- ncol(network_matrix)
-types <- rep("g", num_vars)  # Initialize all as Gaussian
-levels <- rep(1, num_vars)   # Initialize levels
+types <- rep("g", num_vars)  # Start with all variables as Gaussian
+levels <- rep(1, num_vars)   # Initialize levels to 1
 
-# Identify categorical variables
+# Identify the categorical variables and update their types
 categorical_vars <- c("group", "sex", "nbt_did_math")
 categorical_indices <- which(colnames(network_matrix) %in% categorical_vars)
+types[categorical_indices] <- "c"  # Set types for categorical variables
 
-# Update types and levels for categorical variables
-types[categorical_indices] <- "c"
-levels[categorical_indices] <- sapply(network_data[, categorical_indices], function(x) length(unique(x)))
+# Correctly assign levels for categorical variables
+levels[categorical_indices] <- sapply(categorical_vars, function(var) length(unique(network_data[[var]])))
 
-# Ensure 'types' and 'levels' have correct lengths
-types <- types[1:num_vars]
-levels <- levels[1:num_vars]
-
-# Verify 'types' and 'levels'
+# Verify everything looks good before fitting the model
 data.frame(
   Variable = colnames(network_matrix),
   Type = types,
   Level = levels
 ) %>% print()
 
+# Check unique values in 'group'
+print("Unique values in 'group':")
+print(unique(network_data$group))
+
+# Check unique values in 'sex'
+print("Unique values in 'sex':")
+print(unique(network_data$sex))
+
+# Check unique values in 'nbt_did_math'
+print("Unique values in 'nbt_did_math':")
+print(unique(network_data$nbt_did_math))
+
 # Step 9: Fit the mixed graphical model using mgm
+
 mgm_fit <- mgm(
   data = network_matrix,
   type = types,
@@ -187,6 +195,65 @@ mgm_fit <- mgm(
   ruleReg = "AND"
 )
 
-# Check the class of each column in network_matrix
-sapply(network_matrix, class)
+# Extract adjacency matrix and signs
+adjacency_matrix <- mgm_fit$pairwise$wadj
+signs_matrix <- mgm_fit$pairwise$signs
+
+
+# Combine to get the weighted adjacency matrix
+weighted_adj_matrix <- adjacency_matrix * signs_matrix
+
+
+# Set row and column names to variable names
+colnames(weighted_adj_matrix) <- rownames(weighted_adj_matrix) <- colnames(network_matrix)
+
+
+# Replace non-finite values with zero
+weighted_adj_matrix[!is.finite(weighted_adj_matrix)] <- 0
+
+
+# Plot the network
+qgraph(
+  weighted_adj_matrix,
+  layout = "spring",                 # Layout algorithm
+  labels = colnames(network_matrix), # Node labels
+  theme = "colorblind",              # Colorblind-friendly theme
+  edge.color = NULL,                 # Edge colors based on sign
+  posCol = "darkgreen",              # Color for positive edges
+  negCol = "red",                    # Color for negative edges
+  vsize = 7,                         # Node size
+  label.cex = 1.2,                   # Label size
+  edge.width = 1.5,                  # Edge width scaling
+  title = "Mixed Graphical Model Network"
+)
+
+# Create a vector of custom labels
+custom_labels <- c(
+  "Group",            # group
+  "Sex",              # sex
+  "Took Math",        # nbt_did_math
+  "PSY1004 Grade",    # psy1004_grade
+  "NBT Math Score",   # nbt_math
+  "Matric Mark",      # matric_mark
+  "BDI Total",        # bdi1_total
+  "AUDIT Total",      # audit1_total
+  "AAS Total",        # aas1_total
+  "ASRS Total",       # asrs1_total.x
+  "BAI Total"         # bai1_total
+)
+
+# Plot the network with custom labels
+qgraph(
+  weighted_adj_matrix,
+  layout = "spring",
+  labels = custom_labels,
+  theme = "colorblind",
+  edge.color = NULL,
+  posCol = "darkgreen",
+  negCol = "red",
+  vsize = 7,
+  label.cex = 1.2,
+  edge.width = 1.5,
+  title = "Mixed Graphical Model Network"
+)
 
